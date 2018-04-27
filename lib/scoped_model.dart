@@ -1,7 +1,10 @@
-library scoped_model;
+// Copyright 2016 The Fuchsia Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 
 import 'dart:async';
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 /// Base class for classes that provide data via [InheritedWidget]s.
@@ -44,14 +47,15 @@ abstract class Model extends Listenable {
   }
 }
 
-/// Finds a [Model].  This class is necessary as templated classes are
-/// reified but static templated functions are not.
+/// Finds a [Model].  This class is necessary as templated classes are relified
+/// but static templated functions are not.
 class ModelFinder<T extends Model> {
   /// Returns the [Model] of type [T] of the closest ancestor [ScopedModel].
   ///
   /// [Widget]s who call [of] with a [rebuildOnChange] of true will be rebuilt
   /// whenever there's a change to the returned model.
   T of(BuildContext context, {bool rebuildOnChange: false}) {
+    // ignore: prefer_const_constructors
     final Type type = new _InheritedModel<T>.forRuntimeType().runtimeType;
     Widget widget = rebuildOnChange
         ? context.inheritFromWidgetOfExactType(type)
@@ -70,7 +74,7 @@ class ScopedModel<T extends Model> extends StatelessWidget {
   final Widget child;
 
   /// Constructor.
-  ScopedModel({this.model, this.child}) : assert(model != null);
+  const ScopedModel({this.model, this.child}) : assert(model != null);
 
   @override
   Widget build(BuildContext context) => new _ModelListener(
@@ -87,7 +91,7 @@ class _ModelListener extends StatefulWidget {
   final Model model;
   final WidgetBuilder builder;
 
-  _ModelListener({this.model, this.builder});
+  const _ModelListener({this.model, this.builder});
 
   @override
   _ModelListenerState createState() => new _ModelListenerState();
@@ -128,13 +132,12 @@ class _ModelListenerState extends State<_ModelListener> {
 class _InheritedModel<T extends Model> extends InheritedWidget {
   final T model;
   final int version;
-  _InheritedModel({Key key, Widget child, T model})
-      : this.model = model,
-        this.version = model._version,
+  _InheritedModel({Key key, Widget child, this.model})
+      : this.version = model._version,
         super(key: key, child: child);
 
   /// Used to return the runtime type.
-  _InheritedModel.forRuntimeType()
+  const _InheritedModel.forRuntimeType()
       : this.model = null,
         this.version = 0;
 
@@ -160,20 +163,34 @@ class ScopedModelDescendant<T extends Model> extends StatelessWidget {
   /// be passed as the child of [builder].
   final Widget child;
 
-  /// An optional constant that determines whether the
-  final bool rebuildOnChange;
-
   /// Constructor.
-  ScopedModelDescendant(
-      {this.builder, this.child, this.rebuildOnChange = true});
+  const ScopedModelDescendant({this.builder, this.child});
 
   @override
   Widget build(BuildContext context) => builder(
         context,
         child,
-        new ModelFinder<T>().of(
-          context,
-          rebuildOnChange: rebuildOnChange,
-        ),
+        new ModelFinder<T>().of(context, rebuildOnChange: true),
       );
+}
+
+/// Mixin to enable a model to provide tickers for animations.
+abstract class TickerProviderModelMixin extends Model
+    implements TickerProvider {
+  final Set<Ticker> _tickers = new Set<Ticker>();
+
+  /// Creates a ticker with the given callback.
+  @override
+  Ticker createTicker(TickerCallback onTick) {
+    Ticker ticker = new Ticker(onTick);
+    _tickers.add(ticker);
+    return ticker;
+  }
+
+  /// Closes out any active tickers.
+  void dispose() {
+    for (Ticker ticker in _tickers) {
+      ticker.dispose();
+    }
+  }
 }
